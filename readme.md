@@ -136,7 +136,7 @@ urlpatterns = [
 ]
 ```
 
-Luego si recargamos la página http://127.0.0.1/  veremos nuestra vista
+Luego si recargamos la página http://127.0.0.1:8000/  veremos nuestra vista
 ![Hola Mundo](resources/hola_mundo.png)
 
 ### Crear los templates

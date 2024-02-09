@@ -1,7 +1,8 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
+from django.urls import reverse
 from django.views import View
 
 
@@ -35,6 +36,36 @@ class RegisterView(View):
         user.save()
         return HttpResponse("Usuario creado")
     
+
+class UsersView(View):
+    def get(self, request):
+        users = User.objects.all()
+        return render(request, 'auth/users.html', {'users': users})
+
+
+class UserEditView(View):
+    def get(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
+        return render(request, 'auth/user_edit.html', {'user': user})
+
+    def post(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
+        user.username = request.POST['username']
+        user.first_name = request.POST['first_name']
+        user.last_name = request.POST['last_name']
+        password = request.POST.get('password')
+        if password:
+            user.set_password(password) 
+        user.save()
+        return redirect(reverse('user-list'))
+
+
+def user_delete(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+    user.delete()
+    return redirect(reverse('user-list'))
+
+
 def logout_view(request):
     logout(request)
-    return HttpResponse("Has cerrado sesión")
+    return redirect(reverse("login"))

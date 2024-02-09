@@ -1,0 +1,32 @@
+<style>
+    td{
+        border: 1px solid black;
+        padding: 5px;
+    }
+</style>
+<h1>Lista de Usuarios</h1>
+<table>
+    <thead>
+        <tr>
+            <td>ID</td>
+            <td>Usuario</td>
+            <td>Nombre</td>
+            <td>Apellido</td>
+            <td>Ultimo login</td>
+            <td>Acción</td>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.first_name }}</td>
+            <td>{{ user.last_name }}</td>
+            <td>{{ user.last_login }}</td>
+            <td>
+                <a href="#">Editar</a>
+                <a href="#">Eliminar</a>
+            </td>
+        {% endfor %}
+    </tbody>
+</table>

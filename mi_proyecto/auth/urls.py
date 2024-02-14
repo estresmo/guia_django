@@ -8,4 +8,5 @@ urlpatterns = [
     path("users", views.UsersView.as_view(), name="user-list"),
     path("users/edit/<int:user_id>", views.UserEditView.as_view(), name="user-edit"),
     path("users/delete/<int:user_id>", views.user_delete, name="user-delete"), 
+    path("logout", views.logout_view, name="logout"),
 ]

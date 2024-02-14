@@ -28,6 +28,8 @@ Para aquellos que están empezando Django desde 0, está guía es para tí
   * [Haciendo la vista editar](#haciendo-la-vista-editar)
   * [Eliminar](#eliminar)
   * [Repaso](#repaso-1)
+- [Arreglando rutas](#arreglando-rutas)
+  * [Añadiendo algo de seguridad](#anadiendo-algo-de-seguridad)
 
 <!-- tocstop -->
 
@@ -618,3 +620,223 @@ Relación entre el user_id de la ruta con el parámetro de la vista
 ![SameView2](resources/same_view_6.png)
 Relación de las variables de la vista con las de la plantilla
 ![SameView3](resources/same_view_7.png)
+
+## Arreglando rutas
+
+Nuestra aplicación va bien, aunque se siente que falta como algo ¿no?. De en vez de escribir en el navegador la ruta que queremos ver, deberíamos agregar unos links en el usuario para poder navegar de mejor forma. ¿Como hacemos esto de la manera Django?
+
+Empezaremos creando un archivo index.html en la carpeta templates/auth , que va a ser nuestras vista inicial que de ahí nos va a reedireccionará al inicio de sesión o al registro.
+
+`templates/auth/index.html`
+```jinja
+<a href="{% url 'login' %}">Inicio de sesión</a>
+<a href="{% url 'register' %}">Registrar Usuario</a>
+```
+La etiqueta de django `{% url '' %}` en el html hace exactamente lo mismo que la función `reverse` que usamos anteriormente en nuestras vistas. 
+
+Editamos nuestra vista del index para incluir nuestro html que acabamos de crear
+
+`auth/views.py`
+```python
+...
+
+def index(request):
+    return render(request, 'auth/index.html') # Línea Editada
+...
+
+```
+
+Guardamos y ahora si accedemos a http://127.0.0.1:8000/ veremos nuestro pequeño menú funcionando.
+![Index](resources/index.png).
+
+Ahora necesitamos una función para cerrar sesión, y aparte aprovecharemos para mejorar redirigir al usuario a nuestra tabla cuando inicie sesión
+
+`auth/views.py`
+```python
+...
+
+from django.contrib.auth import authenticate, login, logout # Añadimos el , logout a esta línea
+
+...
+
+class LoginView(View):
+    def get(self, request):
+        return render(request, 'auth/login.html')
+
+    def post(self, request):
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect(reverse("user-list")) # Línea Editada
+        else:
+            return HttpResponse("Credenciales inválidas")
+
+...
+# Vista agregada
+def logout_view(request):
+    logout(request)
+    return redirect(reverse("login"))
+
+```
+Agregamos nuestra nueva vista a nuestras rutas
+
+`auth/urls.py`
+```python
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("", views.index, name="index"),
+    path("login", views.LoginView.as_view(), name="login"),
+    path("register", views.RegisterView.as_view(), name="register"),
+    path("users", views.UsersView.as_view(), name="user-list"),
+    path("users/edit/<int:user_id>", views.UserEditView.as_view(), name="user-edit"),
+    path("users/delete/<int:user_id>", views.user_delete, name="user-delete"), 
+    path("logout", views.logout_view, name="logout"), # Línea agregada
+]
+```
+
+Y ya tenemos nuestra función de cerra sesión hecha, ahora vamos a juntar todo en el html de nuestra tabla
+
+`templates/auth/users.html`
+```jinja
+<style>
+    td{
+        border: 1px solid black;
+        padding: 5px;
+    }
+</style>
+<a href="{% url 'logout' %}">Cerrar sesión</a>
+<h1>Lista de Usuarios</h1>
+<table>
+    <thead>
+        <tr>
+            <td>ID</td>
+            <td>Usuario</td>
+            <td>Nombre</td>
+            <td>Apellido</td>
+            <td>Ultimo login</td>
+            <td>Acción</td>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.first_name }}</td>
+            <td>{{ user.last_name }}</td>
+            <td>{{ user.last_login }}</td>
+            <td>
+                <a href="{% url 'user-edit' user.id %}">Editar</a>
+                <a href="{% url 'user-delete' user.id %}">Eliminar</a>
+            </td>
+        {% endfor %}
+    </tbody>
+</table>
+```
+
+Aquí añadimos el enlace para cerrar sesión, además que editamos los enlaces de editar y eliminar para que nos mande a su respectiva vista.
+
+Explicación
+`{% url 'user-edit' user.id %}` lo que está dentro de las comillas es el nombre de la ruta en el `urls.py`, y lo que está afuera es los parámetros que pide la ruta. En este caso mandamos el id del usuario.
+![Index](resources/url_relation.png).
+
+> **Recomendación:** Como ejercicio puedes agregarle un enlace de volver a editar usuarios, así como colocar una reedirección al registrar un usuario
+
+
+### Añadiendo algo de seguridad
+
+Como ya hemos visto, cualquiera puede ver, editar y eliminar los usuarios que tenemos, aunque no hayan iniciado sesión igual nuestra aplicación les permite acceder a cualquiera, por eso editaremos nuestras vistas criticas en django para dejar pasar a la gente solo si ha iniciado sesión. Nos quedaría así;
+
+`auth/views.py`
+```python
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login, logout
+from django.urls import reverse
+from django.views import View
+from django.contrib.auth.decorators import login_required # Línea agregada
+from django.contrib.auth.mixins import LoginRequiredMixin # Línea agregada
+
+def index(request):
+    return render(request, 'auth/login.html')
+
+
+class LoginView(View):
+    def get(self, request):
+        return render(request, 'auth/login.html')
+
+    def post(self, request):
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect(reverse("user-list"))
+        else:
+            return HttpResponse("Credenciales inválidas")
+
+
+class RegisterView(View):
+    def get(self, request):
+        return render(request, 'auth/register.html')
+
+    def post(self, request):
+        username = request.POST['username']
+        password = request.POST['password']
+        user = User.objects.create_user(username=username, password=password)
+        user.save()
+        return HttpResponse("Usuario creado")
+    
+
+class UsersView(LoginRequiredMixin, View): # Línea Editada
+    def get(self, request):
+        users = User.objects.all()
+        return render(request, 'auth/users.html', {'users': users})
+
+
+class UserEditView(LoginRequiredMixin, View): # Línea editada
+    def get(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
+        return render(request, 'auth/user_edit.html', {'user': user})
+
+    def post(self, request, user_id):
+        user = get_object_or_404(User, id=user_id)
+        user.username = request.POST['username']
+        user.first_name = request.POST['first_name']
+        user.last_name = request.POST['last_name']
+        password = request.POST.get('password')
+        if password:
+            user.set_password(password) 
+        user.save()
+        return redirect(reverse('user-list'))
+
+
+@login_required # Línea agregada
+def user_delete(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+    user.delete()
+    return redirect(reverse('user-list'))
+
+
+@login_required # Línea agregada
+def logout_view(request):
+    logout(request)
+    return redirect(reverse("login"))
+
+```
+
+Aquí usamos varios trucos de django para no permitir la entrada a la vista sino ha iniciado sesión, esto a las vistas hechas con una función (ejemplo `def user_delete(request)`) se le añade el decorador `@login_required` justo una línea encima de la función, y en caso de las vistas hechas con clases le ponemos a heredar `LoginRequiredMixin` antes del `View`, por ejemplo `class UserEditView(LoginRequiredMixin, View)` (Tiene que ser antes del `View`, porque al colocarla después no funcionará). Vamos a nuestra página http://127.0.0.1:8000/users, cerramos sesión y tratamos de acceder a la página de users sin haber iniciado a ver que pasa
+![Logout Error](resources/logout_error.png).
+
+Nos aparece un error porque django por default nos redirige a la ruta `http://127.0.0.1:8000/accounts/login/`. Ruta que no existe porque no la hemos creado, para arreglar este error configuramos el Django para indicarle cuál es nuestra ruta de inicio de sesión. Editamos el `mi_proyecto/settings.py` y añadimos al final:
+```python
+...
+LOGIN_URL = 'login'
+```
+(Esto porque en nuestro `urls.py`, nuestra vista de login tiene el name='login')
+
+Ahora cuando intentamos acceder a http://127.0.0.1:8000/users sin haber iniciado sesión nos reedirige al login

@@ -4,10 +4,11 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.urls import reverse
 from django.views import View
-
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 def index(request):
-    return HttpResponse("Hola Mundo")
+    return render(request, 'auth/login.html')
 
 
 class LoginView(View):
@@ -20,7 +21,7 @@ class LoginView(View):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            return HttpResponse("Has iniciado sesión")
+            return redirect(reverse("user-list"))
         else:
             return HttpResponse("Credenciales inválidas")
 
@@ -37,13 +38,13 @@ class RegisterView(View):
         return HttpResponse("Usuario creado")
     
 
-class UsersView(View):
+class UsersView(LoginRequiredMixin, View):
     def get(self, request):
         users = User.objects.all()
         return render(request, 'auth/users.html', {'users': users})
 
 
-class UserEditView(View):
+class UserEditView(LoginRequiredMixin, View):
     def get(self, request, user_id):
         user = get_object_or_404(User, id=user_id)
         return render(request, 'auth/user_edit.html', {'user': user})
@@ -60,12 +61,14 @@ class UserEditView(View):
         return redirect(reverse('user-list'))
 
 
+@login_required
 def user_delete(request, user_id):
     user = get_object_or_404(User, id=user_id)
     user.delete()
     return redirect(reverse('user-list'))
 
 
+@login_required
 def logout_view(request):
     logout(request)
     return redirect(reverse("login"))

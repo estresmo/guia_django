@@ -4,6 +4,7 @@
         padding: 5px;
     }
 </style>
+<a href="{% url 'logout' %}">Cerrar sesión</a>
 <h1>Lista de Usuarios</h1>
 <table>
     <thead>
@@ -24,8 +25,8 @@
             <td>{{ user.last_name }}</td>
             <td>{{ user.last_login }}</td>
             <td>
-                <a href="#">Editar</a>
-                <a href="#">Eliminar</a>
+                <a href="{% url 'user-edit' user.id %}">Editar</a>
+                <a href="{% url 'user-delete' user.id %}">Eliminar</a>
             </td>
         {% endfor %}
     </tbody>

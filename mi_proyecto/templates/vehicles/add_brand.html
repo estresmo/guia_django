@@ -1,0 +1,12 @@
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <a href="{% url 'brand-list' %}"> Volver</a>
+    <div class="card">
+        <form action="" method="post">
+            {% csrf_token %}
+            {{ form }}  
+            <button type="submit" class="btn btn-primary mt-2">Guardar</button>
+        </form>
+    </div>
+{% endblock content %} 

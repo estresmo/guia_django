@@ -1,0 +1,40 @@
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <a href="{% url 'vehicle-add' %}" class="btn btn-primary">Añadir</a>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Marca</th>
+                <th>Año</th>
+                <th>Foto</th>
+                <th>Tipo</th>
+                <th>Modelo</th>
+                <th>Precio</th>
+                <th>Fecha creación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for vehicle in object_list  %}
+            <tr>
+                <td>{{ vehicle.id }}</td>
+                <td>{{ vehicle.brand.name }}</td>
+                <td>{{ vehicle.year }}</td>
+                <td>
+                    <img src="/media/{{ vehicle.photo }}" alt="" style="max-width: 50px; max-height:50px">
+                </td>
+                <td>{{ vehicle.type_label }}</td>
+                <td>{{ vehicle.model }}</td>
+                <td>{{ vehicle.price }}</td>
+                <td>{{ vehicle.created_at }}</td>
+                <td>
+                    <a href="{% url 'vehicle-edit' vehicle.pk %}" class="btn btn-info">Editar</a>
+                    <a href="{% url 'vehicle-delete' vehicle.pk %}" class="btn btn-danger">Eliminar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock content %} 

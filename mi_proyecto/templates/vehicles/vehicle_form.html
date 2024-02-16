@@ -1,0 +1,19 @@
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <style>
+        form > div {
+            width: 90%;
+            margin: 5px auto;
+        }
+    </style>
+    <a href="{% url 'vehicle-list' %}"> Volver</a>
+    <div class="card text-center" style="width: 300px;">
+        <h3>Formulario Vehículos</h3>
+        <form action="" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_div }}  
+            <button type="submit" class="btn btn-primary my-2">Guardar</button>
+        </form>
+    </div>
+{% endblock content %} 

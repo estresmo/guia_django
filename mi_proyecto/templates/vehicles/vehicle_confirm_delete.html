@@ -1,0 +1,9 @@
+{% extends 'vehicles/base.html' %}
+{% block content %}
+<a href="{% url 'vehicle-list' %}">Volver</a>
+<form method="post">{% csrf_token %}
+    <p>Estás seguro de eliminar "{{ object }}"?</p>
+    {{ form }}
+    <button type="submit" class="btn btn-danger"> Confirmar</button>
+</form>
+{% endblock %}

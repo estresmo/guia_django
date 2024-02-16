@@ -840,3 +840,649 @@ LOGIN_URL = 'login'
 (Esto porque en nuestro `urls.py`, nuestra vista de login tiene el name='login')
 
 Ahora cuando intentamos acceder a http://127.0.0.1:8000/users sin haber iniciado sesión nos reedirige al login
+
+## Creando mi modelo
+Ahora que hicimos un CRUD con el modelo User de Django, ahora nos toca hacer un CRUD pero con nuestro propio modelo. Tomaremos como ejemplo que somos el gerente de una concesionaria que vende autos motos y camiones. Necesitamos un sistema que nos indique autos tenemos disponibles y las características del mismo.
+
+  Para hacer esto primero creamos otra app para separarlo de lo que hicimos anteriormente, ejecutamos el comando
+
+```powershell
+py manage.py startapp vehicles 
+```
+
+Ahora vamos a escribir nuestro primer modelo, que será el de vehículo, para esto necesitamos primero pensar que características nos interesa del vehículo para colocarlo como campos de nuestro modelo, estos pueden ser el año, marca, modelo, precio, foto, tipo(camión, auto o moto). 
+
+Analizando estos campos podemos determinar que el modelo es un campo de texto, año es numérico, marca es texto pero varios vehículos pueden pertenecer a una misma marca, por lo tanto crearemos un modelo referenciado para este campo, precio numérico, foto es tipo archivo y tipo solo 3 opciones. Maquetando nos quedaría
+
+>> *Nota* en los modelos  los nombres de las clases se colocan en singular, no en plural.
+
+`vehicles/models.py`
+```python
+from django.db import models
+
+
+class Brand(models.Model):
+  name = models.CharField(max_length=100, unique=True) # Nombre de la marca, único porque no puede haber dos marcas con el mismo nombre.
+
+
+class Vehicle(models.Model):
+    class Type(models.IntegerChoices):
+        MOTO = 1, "Moto"
+        CAR = 2, "Carro"
+        TRUCK = 3, "Camión"
+
+    brand = models.ForeignKey(Brand, on_delete=models.DO_NOTHING)  # Marca
+    year = models.IntegerField() # Año
+    photo = models.FieldFile(upload_to="vehicles") # Foto
+    type = models.IntegerField(choices=Type.choices)   # Tipo de vehículo
+    model = models.CharField(max_length=100)  # Modelo del vehículo, máximo 100 caracteres
+    price = models.IntegerField() # Precio
+    created_at = models.DateTimeField(auto_now_add=True) # Fecha de creación, 
+```
+
+Aquí creamos una tabla de la marca, que va a hacer referenciada por la tabla vehículo, ya que varias marcas pueden tener (1) vehículo. 
+En el modelo Vehículo tenemos:
+1. `brand` (marca), que hace referencia al modelo `Brand` , y al eliminarse una marca no hace nada con los vehículos. Se puede colocar para cuando se elimine una marca se eliminen todos los vehículos de esa marca (models.Cascade)
+2.  `year` Campo numérico que nos indica de que año es el carro
+3. `photo` Campo de archivo, que guardara las fotos en la carpeta `vehicles` dentro de la carpeta media de django (Ya lo veremos más adelante)
+4. `type` Tipo de vehículo, como solo son 3 tipos de vehículos ponemos un campo de opciones, creamos la clase Type que hereda `models.IntegerChoices`, Porque tiene un indice numérico (1, 2, 3) y un texto descriptivo de que es ese número. También hay [otras maneras](https://docs.djangoproject.com/en/5.0/ref/models/fields/#choices) de hacer un campo choices
+5. `model` Nombre del modelo del vehículo, como todos los modelos
+6. `price` Precio del vehículo 
+7. `created_at` Campo de fecha y hora, que nos indica la hora y fecha exacta en la que se guarda un nuevo vehículo, con el `auto_now_add=True` le indicamos que automáticamente guarde la fecha y hora en la que se crea un nuevo modelo.
+
+Estos es un ejemplo usando algunos tipos de campos que nos proporciona Django, para ver más tipos de campos presione [aquí](https://docs.djangoproject.com/en/5.0/ref/models/fields/) 
+
+### Aplicando los cambios a la base de datos
+
+Ahora que tenemos nuestro modelo necesitamos que django cree la tabla en nuestra base de datos (actualmente SQLite). Para esto primero necesitamos registrar nuestra app en el `mi_proyecto/settings.py`. Vamos donde dice INSTALLED_APPS y agregamos la siguiente línea
+
+`mi_proyecto/settings.py`
+```python
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'vehicles', # Agregamos está línea
+]
+```
+Como el nombre de la app que creamos con el comando `py manage.py startapp vehicles` , es el de `vehicles`; Colocamos ese mismo como string en la lista de INSTALLED_APPS.
+
+Ahora creamos las migraciones (para que Django detecte que cambios hicimos en los modelos) ejecutando en la consola
+```powershell
+py manage.py makemigrations
+```
+Ejecutamos las migraciones con
+```powershell
+py manage.py migrate
+```
+Estos dos comandos siempre los tenemos que ejecutar cuando editamos o creamos un modelo, para que puedan surtir efecto en la base de datos que estemos usando
+
+
+### Creando formularios con django forms
+
+Django tiene un "hack" para generar formularios a partir de modelos que hayamos creado. Este es una alternativa al proceso que hicimos en nuestro modulo `auth`. Para usar esta opción creamos un archivo llamado `forms.py` en nuestra carpeta `vehicles`. Aquí colocamos:
+
+`vehicles/forms.py`
+```python
+from django.forms import ModelForm
+from .models import Brand, Vehicle
+
+class BrandForm(ModelForm):
+    class Meta:
+        model = Brand
+        fields = '__all__'
+
+
+class VehicleForm(ModelForm):
+    class Meta:
+        model = Vehicle
+        exclude = ['created_at']
+```
+Aquí creamos nuestros formularios django a partir de nuestros modelos, Cada formulario tiene que tener una subclase llamada `Meta` y esta subclase debe tener las propiedades `model` (Que es igual al modelo que queremos representar) y `fields` (o `exclude`). `fields` puede ser una lista de los nombres de los campos que queremos procesar en nuestro formulario, ejemplo `fields = ["brand", "model"]`, o un string colocando `__all__` para usar todos los campos del modelo. Si quieres procesar todos los campos excepto alguno(s) en vez de fields usas exclude, que toma como valor una lista de los nombres de los campos que no quieres procesar. En este caso como `created_at` lo configuramos para que se asigne un valor automáticamente no necesitamos procesarlo.
+
+Para usar estos formularios nos vamos a nuestras vistas
+
+`vehicles/views.py`
+```python
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from .models import Brand
+from .forms import BrandForm
+
+def view_brands(request):
+    brands = Brand.objects.all()
+    context = {'brands': brands}
+    return render(request, 'vehicles/brands.html', context)
+
+def add_brand(request):
+    if request.method == 'POST':
+        form = BrandForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect(reverse("brand-list"))
+    else:
+        form = BrandForm()
+    context = {'form': form}
+    return render(request, 'vehicles/add_brand.html', context)
+
+def edit_brand(request, id):
+    brand = Brand.objects.get(id=id)
+    if request.method == 'POST':
+        form = BrandForm(request.POST, instance=brand)
+        if form.is_valid():
+            form.save()
+            return redirect(reverse("brand-list"))
+    else:
+        form = BrandForm(instance=brand)
+    context = {'form': form}
+    return render(request, 'vehicles/add_brand.html', context)
+
+
+def delete_brand(request, id):
+    brand = Brand.objects.get(id=id)
+    brand.delete()
+    return redirect(reverse("brand-list"))
+
+```
+Aquí ya tenemos nuestro CRUD de nuestro modelo Brand hecho solo con funciones (más adelante haremos el de vehículos), como vemos importamos nuestro formulario con `from .forms import BrandForm`, en agregar lo cargamos vació `form = BrandForm()` porque lo vamos a renderizar vacío en el HTML, y necesitamos colocar el `instance` en `form = BrandForm(instance=brand)` cuando vamos a editar un modelo ya existente. Y cuando procesamos el formulario en el POST le pasamos los datos que manda el usuario `form = BrandForm(request.POST)` o `form = BrandForm(request.POST, instance=brand)` y usamos el método `form.is_valid()` para detectar que los datos que nos mande el usuario son lo que esperamos en el modelo.
+
+Ahora necesitamos crear nuestros HTML, pero... de forma más pro 😎. Antes de crear los HTML de nuestras vistas crearemos el esqueleto que van a compartir (o en otras palabras, el menú), para esto creamos la carpeta `vehicles` en `templates` y creamos un archivo llamado `base.html`
+
+`templates/vehicles/base.html`
+```jinja
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehículos</title>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-body-tertiary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Aprende Django</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+                <div class="navbar-nav">
+                    <a class="nav-item nav-link" href="{% url 'user-list' %}">Usuarios</a>
+                    <a class="nav-item nav-link" href="#">Productos</a>
+                    <a class="nav-item nav-link" href="{% url 'brand-list' %}">Marcas</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
+```
+Ahora usaremos algo de bootstrap (más información [aquí](https://getbootstrap.com/docs/5.3/getting-started/introduction/)) para mejorar nuestro estilo 😉 (aunque no nos enfocaremos en eso)
+
+Aquí la etiqueta importante es la etiqueta `{% block content %}`, que significa que ahí va a estar el bloque `content`, puedes poner cuantos bloques quieras con el nombre que quieras. 
+
+Vamos a ver como se usa esto, ahora crearemos nuestro archivo `vehicles/brands.html`
+
+`templates/vehicles/brands.html`
+```jinja
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <a href="{% url 'brand-add' %}" class="btn btn-primary">Añadir</a>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Nombre</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for brand in brands %}
+            <tr>
+                <td>{{ brand.id }}</td>
+                <td>{{ brand.name }}</td>
+                <td>
+                    <a href="{% url 'brand-edit' brand.id %}" class="btn btn-info">Editar</a>
+                    <a href="{% url 'brand-delete' brand.id %}" class="btn btn-danger">Eliminar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock content %} 
+```
+
+Aquí con la etiqueta `extends` le decimos a Django que vamos a usar la estructura de `vehicles/base.html`, y creamos nuestro bloque `content`, que se va a colocar justo donde pusimos la etiqueta `{% block content %}{% endblock %}` en el archivo anterior. Cualquier código que coloques fuera de este bloque será ignorado, al igual que cualquier bloque que no esté en el `base.html`. 
+
+Creamos los otros dos HTML que nos faltan
+
+`templates/vehicles/add_brand.html`
+```
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <a href="{% url 'brand-list' %}"> Volver</a>
+    <div class="card">
+        <form action="" method="post">
+            {% csrf_token %}
+            {{ form }}
+            <button type="submit" class="btn btn-primary mt-2">Guardar</button>
+        </form>
+    </div>
+{% endblock content %} 
+```
+Ya con colocar el `{{form}}` renderiza los campos del formulario en HTML automáticamente. Creamos nuestro otro archivo para editar, y como veremos en unos momentos este archivo nos servirá tanto para añadir como para editar.
+
+Ahora creamos nuestro archivo `urls.py` para agregar nuestras rutas
+
+`vehicles/urls.py`
+```python
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("brands", views.view_brands, name="brand-list"),
+    path("brands/add", views.add_brand, name="brand-add"),
+    path("brands/edit/<int:id>", views.edit_brand, name="brand-edit"),
+    path("brands/delete/<int:id>", views.delete_brand, name="brand-delete"),
+]
+```
+
+Y no olvidemos agregar nuestras rutas de la aplicación (en este caso `vehicles`) a nuestras rutas principales en `mi_proyecto/urls.py` e importamos las rutas de `vehicles` 
+
+`mi_proyecto/urls.py`
+```python
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("", include("auth.urls")),
+    path("vehicles/", include("vehicles.urls")), # Línea agregada
+    path("admin/", admin.site.urls),
+]
+```
+
+Aquí agregamos el "vehicles/" como parámetro inicial para que en el navegador todas las rutas que estén en el vehicles/urls.py empiecen por "vehicles/". Guardamos y probamos lo que hemos hecho yendo a la página http://127.0.0.1:8000/vehicles/brands 
+
+Al añadir y editar algunos registros tendríamos algo parecido a esto
+![Brand1](resources/brands_1.png)
+
+Ahora si intentamos añadir un nombre repetido, nos dará error ya que pusimos que ese campo era único (el form de Django hace esa validación automáticamente)
+![Brand2](resources/brands_2.png)
+
+Bueno si queremos nuestra validación y campo en español tenemos que hacer un par de cambios, primero cambiar al campo `name` del modelo `Brand`, agregando el parámetro `verbose_name="Nombre"`. Y añadiendo la subclase `Meta` con el atributo `verbosa_name = "marca"`
+
+`vehicles/models.py`
+```python
+from django.db import models
+
+
+class Brand(models.Model):
+  class Meta:
+        verbose_name = "marca"
+
+  name = models.CharField(max_length=100, unique=True, verbose_name="nombre") # Línea editada
+
+...
+```
+![Brand3](resources/brand_3.png)
+Ya nos cambio el nombre del campo y del modelo, ahora para cambiar la validación editamos el `settings.py` vamos a donde dice `LANGUAGE_CODE = 'en-us'` y lo cambiamos por LANGUAGE_CODE = 'es'. Guardamos y listo
+![Brand4](resources/brand_4.png)
+
+### Creando vistas en Django con Clases especiales
+Ahora vamos a implementar otra forma de crear un CRUD usando clases de Django, lo haremos para nuestro modelo `Vehicle`.
+Editamos nuestras vistas
+
+`vehicle/views.py`
+```python
+from django.shortcuts import redirect, render
+from django.urls import reverse, reverse_lazy # Agregado reverse_lazy
+from .models import Brand, Vehicle # Agregado Vehicle
+from .forms import BrandForm, VehicleForm # Agregado VehicleForm
+from django.views.generic.list import ListView # Línea agregada
+from django.views.generic.edit import CreateView, UpdateView, DeleteView # Línea agregada
+
+
+...
+
+
+class VehicleListView(ListView):
+    model = Vehicle
+
+
+class VehicleAddView(CreateView):
+    model = Vehicle
+    form_class = VehicleForm
+    success_url = reverse_lazy("author-list") 
+
+
+class VehicleEditView(UpdateView):
+    model = Vehicle
+    form_class = VehicleForm
+    success_url = reverse_lazy("author-list") 
+
+
+class VehicleDeleteView(DeleteView):
+    model = Vehicle
+    success_url = reverse_lazy("author-list") 
+    # success_url es el URL a redirigir cuando elimina la vista exitosamente
+    # puedes colocar un success_url en un CreateView o en UpdateView
+    # cuando el url está en un atributo de clase se usa reverse_lazy en vez de reverse
+```
+Y con esas pocas líneas de código ya tenemos nuestro CRUD hecho, estás son vistas genericas de Django. Aparte de estas vistas hay más [que puedes consultar aquí](https://docs.djangoproject.com/en/5.0/ref/class-based-views/). 
+Te preguntaras, ¿y el HTML? Bueno las vistas genéricas buscan un patrón especifico para conseguir la plantilla html correcta. En el caso de un ListView este busca la plantilla que tenga el nombre del modelo y termine en `_list.html`. Así que en este caso crearemos nuestro archivo
+
+`templates/vehicles/vehicle_list.html`
+```jinja
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <a href="{% url 'vehicle-add' %}" class="btn btn-primary">Añadir</a>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Marca</th>
+                <th>Año</th>
+                <th>Foto</th>
+                <th>Tipo</th>
+                <th>Modelo</th>
+                <th>Precio</th>
+                <th>Fecha creación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for vehicle in vehicles %}
+            <tr>
+                <td>{{ vehicle.id }}</td>
+                <td>{{ vehicle.brand.name }}</td>
+                <td>{{ vehicle.year }}</td>
+                td>
+                    <img src="/media/{{ vehicle.photo }}" alt="" style="max-width: 50px; max-height:50px">
+                </td>
+                <td>{{ vehicle.type }}</td>
+                <td>{{ vehicle.model }}</td>
+                <td>{{ vehicle.price }}</td>
+                <td>{{ vehicle.created_at }}</td>
+                <td>
+                    <a href="{% url 'vehicle-edit' vehicle.pk %}" class="btn btn-info">Editar</a>
+                    <a href="{% url 'vehicle-delete' vehicle.pk %}" class="btn btn-danger">Eliminar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock content %} 
+```
+(Si quieres colocar otro nombre a tu html, le colocas el atributo `template_name = "mi_archivo.html"` en cualquiera de las vistas genéricas )
+
+Para un CreateView o un UpdateView busca la plantilla html con el nombre del modelo, seguido del sufijo _form
+
+`templates/vehicles/vehicle_form.html`
+```jinja
+{% extends "vehicles/base.html" %}
+
+{% block content %}
+    <style>
+        form > div {
+            width: 90%;
+            margin: 5px auto;
+        }
+    </style>
+    <a href="{% url 'vehicle-list' %}"> Volver</a>
+    <div class="card text-center" style="width: 300px;">
+        <h3>Formulario Vehículos</h3>
+        <form action="" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_div }}  
+            <button type="submit" class="btn btn-primary my-2">Guardar</button>
+        </form>
+    </div>
+{% endblock content %} 
+```
+Aquí al form le agregamos el `.as_div` para que genere los inputs dentro de un div, y así poderlos estilizar un poco más fácil. Muy importante el atributo `enctype="multipart/form-data"` en la etiqueta form, ya que es obligatorio cuando queremos subir un archivo, sin ese atributo no funcionará. También para que nos funcione correctamente tenemos que modificar un par de archivos, empezando por el settings
+
+
+`mi_proyecto/settings.py`
+```python
+...
+# Agregamos al final estas dos líneas
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+```
+
+Y el urls principal
+
+`mi_proyecto/urls.py`
+```python
+from django.contrib import admin
+from django.urls import include, path
+from django.conf import settings # Línea agregada
+from django.conf.urls.static import static # Línea agregada
+urlpatterns = [
+    path("", include("auth.urls")),
+    path("vehicles/", include("vehicles.urls")), 
+    path("admin/", admin.site.urls),
+]
+
+# Código agregado
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+Y ya nuestra aplicación esta preparada para subir archivos.
+
+Volviendo a las vistas genéricas, el DeleteView elimina el modelo en el método POST, y en el GET carga un html que tiene que llamarse igual que el modelo y terminar en `_confirm_delete.html`. Creamos este archivo
+
+`templates/vehicles/vehicle_confirm_delete.html`
+```jinja
+{% extends 'vehicles/base.html' %}
+{% block content %}
+<a href="{% url 'vehicle-list' %}">Volver</a>
+<form method="post">{% csrf_token %}
+    <p>Estás seguro de eliminar "{{ object }}"?</p>
+    {{ form }}
+    <button type="submit" class="btn btn-danger"> Confirmar</button>
+</form>
+{% endblock %}
+```
+
+Por último configuramos nuestras rutas
+
+`vehicles/urls.py`
+```python
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("brands", views.view_brands, name="brand-list"),
+    path("brands/add", views.add_brand, name="brand-add"),
+    path("brands/edit/<int:id>", views.edit_brand, name="brand-edit"),
+    path("brands/delete/<int:id>", views.delete_brand, name="brand-delete"),
+    # Código agregado
+    path("vehicles", views.VehicleListView.as_view(), name="vehicle-list"),
+    path("vehicles/add", views.VehicleAddView.as_view(), name="vehicle-add"),
+    path("vehicles/edit/<int:pk>", views.VehicleEditView.as_view(), name="vehicle-edit"),
+    path("vehicles/delete/<int:pk>", views.VehicleDeleteView.as_view(), name="vehicle-delete"),
+]
+```
+Cuando se usa vistas genéricas el argumento debe llamarse `pk`, en un modelo el `pk` es lo mismo que el `id`
+
+Guardamos y probamos...
+
+Un segundo...
+
+Nuestro formulario de Vehículos no luce muy bien
+![Formulario](resources/formulario_vehicle.png)
+y en Brand no se distingue cuál es cuál. Primero arreglaremos esto agregando la función mágica str al modelo (Está función se ejecuta cuando una clase es transformada a texto)
+
+`vehicles/models.py`
+
+```python
+from django.db import models
+
+
+class Brand(models.Model):
+    class Meta:
+        verbose_name = "marca"
+
+    name = models.CharField(max_length=100, unique=True, verbose_name="nombre")
+
+    # Agregamos está función mágica para que devuelva el nombre de la marca
+    def __str__(self) :
+        return self.name
+
+
+class Vehicle(models.Model):
+    class Type(models.IntegerChoices):
+        MOTO = 1, "Moto"
+        CAR = 2, "Carro"
+        TRUCK = 3, "Camión"
+
+    brand = models.ForeignKey(Brand, on_delete=models.DO_NOTHING)  # Marca
+    year = models.IntegerField() # Año
+    photo = models.FileField(upload_to="vehicles") # Foto
+    type = models.IntegerField(choices=Type.choices)   # Tipo de vehículo
+    model = models.CharField(max_length=100, unique=True)  # Modelo del vehículo
+    price = models.IntegerField() # Precio
+    created_at = models.DateTimeField(auto_now_add=True) # Fecha de creación
+
+    # Agregamos está función mágica para que devuelva el nombre del modelo junto a su marca
+    def __str__(self) :
+        return self.brand.name + self.model
+```
+Ya arreglamos nuestra marca, pero para nuestro formulario queremos colocar la clase de bootstrap `form-control` a cada uno de nuestros inputs, una manera de hacer esto es editando nuestro forms.py
+
+`vehicles/forms.py`
+```python
+from django.forms import ModelForm
+from .models import Brand, Vehicle
+
+class BrandForm(ModelForm):
+    class Meta:
+        model = Brand
+        fields = '__all__'
+
+
+class VehicleForm(ModelForm):
+
+    # Añadimos está función
+    def __init__(self, *args, **kwargs):
+        super(VehicleForm, self).__init__(*args, **kwargs)
+        for visible in self.visible_fields():
+            visible.field.widget.attrs['class'] = 'form-control'
+
+    class Meta:
+        model = Vehicle
+        exclude = ['created_at']
+```
+Aquí sobre-escribimos el constructor que hereda de ModelForm, por lo que llamamos primero al constructor que se hereda con `super(VehicleForm, self).__init__(*args, **kwargs)`. Luego iteramos los campos visibles de nuestro formulario, y ahí le añadimos al atributo class el valor de form-control. (Puede que esta manera sea algo compleja, siempre puedes colocar los forms en el HTML manualmente para mayor personalización).
+
+![Formulario2](resources/formulario_vehicle_2.png)
+
+Mucho mejor 😉 Como ejercicio te reto a colocar todos los campos en español.
+
+Guarda y edita bien... pero hay algo raro en la tabla, el campo tipo me muestra solo un número, ¿Como puedo arreglar esto?
+Pues vamos a crear una función que nos devuelva el texto del tipo de vehículo en nuestro modelo
+```python
+from django.db import models
+
+
+class Brand(models.Model):
+    class Meta:
+        verbose_name = "marca"
+
+    name = models.CharField(max_length=100, unique=True, verbose_name="nombre")
+
+    def __str__(self) :
+        return self.name
+
+
+class Vehicle(models.Model):
+    class Type(models.IntegerChoices):
+        MOTO = 1, "Moto"
+        CAR = 2, "Carro"
+        TRUCK = 3, "Camión"
+
+    brand = models.ForeignKey(Brand, on_delete=models.DO_NOTHING)  # Marca
+    year = models.IntegerField() # Año
+    photo = models.FileField(upload_to="vehicles") # Foto
+    type = models.IntegerField(choices=Type.choices)   # Tipo de vehículo
+    model = models.CharField(max_length=100, unique=True)  # Modelo del vehículo
+    price = models.IntegerField() # Precio
+    created_at = models.DateTimeField(auto_now_add=True) # Fecha de creación
+
+    def __str__(self) :
+        return self.brand.name + self.model
+
+    # Agregamos está función
+    def type_label(self):
+        return self.Type(self.type).label
+```
+Aquí creamos la función type_label, que devuelve el label según la clase `Type`, que toma como parámetro el valor actual de `type`.
+
+Para terminar editamos el html `templates/vehicles/vehicle_list.html` buscamos la línea que aparece así `<td>{{ vehicle.type }}</td>` y la cambiamos por `<td>{{ vehicle.type_label }}</td>`
+
+Y ya estaríamos listo con nuestro CRUD, como pudiste observar puedes hacerlo de diferentes formas, usando formularios Django o no usarlos (como en nuestro login), usando funciones o usando clases genéricas.
+
+El código del proyecto que estamos haciendo está en este repositorio, por si tienes algún error poder comparar ahí
+
+## Pendientes
+
+Próximo episodios a desarrollar:
+- Crear paginación en las vistas
+- Crear filtros en las vistas
+- Usar mensajes en Django
+- Colección de Recursos para Django
+
+## Buenas Prácticas
+
+A continuación una lista de recomendaciones para que tu código Django sea limpio, bonito y escalable. No es necesario seguirlas para que tu código funcione, sin embargo si son altamente recomendables
+
+### Python General
+1. En Python, los nombres de las variables y funciones son todo en minúscula, separados por barra baja de ser necesario *Bien* `fecha_nacimiento = "27/10/2000"` *Mal* `fechanacimiento = "27/10/2000"` o `FechaNacimiento = "27/10/2000`
+2. El nombre de clases siempre empieza con mayúscula, al igual que cada inicial de las palabras *Bien* `class Perro` o `class MarcaRopa` *Mal* `class perro` o `class marcaropa` o `marcaRopa`
+3. El nombre de constantes va con todas las letras en mayúsculas, separadas por barra baja *Bien* `GRAVEDAD_TIERRA = 9,80665` o `MILLA = 1.60934`
+4. Colocar un espacio entre variable-igual y igual-valor *Mal* `peso=12` o `peso= 12` *Bien* `peso = 12`
+5. El nombre de las variables debe ser descriptivo, osea debe relacionarse al valor que posee. *Mal* `nombre = 42` o `a = "José"` *Bien* `nombre = "Pedro"`
+6. Se debe evitar abreviar el nombre de las variables (a menos que sea una abreviación muy conocida), así sean mucho más corto, ya que es difícil comprender que significa cada abreviación. *Mal* `ci = 1234` *Bien* `cedula = 1234`.
+7. Los imports siempre van arriba del documento, antes de declarar variables/funciones/etc.
+8. (Recomendación personal) Escribir los nombres de las variables, constantes, atributos, clases, funciones, métodos en inglés, ya que el inglés es un estándar en el mundo de la programación, y así vas practicándolo (usando Google Traductor :P)
+
+
+### Django
+1. Cuando creas un modelo, no repitas el nombre del modelo cuando crees sus campos. Es redundante 
+
+*Mal*
+```python
+class Perro(models.Model):
+    nombre_perro = models...
+    edad_perro = models...
+```
+
+*Bien*
+```python
+class Perro(models.Model):
+    nombre = models...
+    edad = models...
+```
+
+2. El nombre de los modelos generalmente es en singular, *mal* `class Perros` *bien* `class Perro`
+
+3. (Recomendación) A las clases de tus forms añádele el sufijo Form `class PerroForm`, igual a las clases de tus views añade el sufijo View `class PerroView` `class EditarPerroView`. A las de Models no le agregues ningún sufijo/prefijo `class Perro`
+
+4. En el base.html que uses recomiendo tener un bloque para lo que va en la etiqueta head, como el css. Un bloque para el contenido en sí. Un bloque para el javascript, que iría justo antes de la etiqueta cierre de body, y un bloque para las modales (si es que usas modales) justo antes del javascript.
+
+5. En los archivos html de Django no uses rutas como `/usuarios/editar/{{ user.id }}`. En su lugar usa `{% url 'user-edit' user.id %}`
+
+6. Trata de crear una carpeta con el mismo nombre de la app en tus templates, así vas a ubicar fácilmente tus archivos html.
+

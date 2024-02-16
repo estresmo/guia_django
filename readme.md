@@ -1209,7 +1209,7 @@ Te preguntaras, ¿y el HTML? Bueno las vistas genéricas buscan un patrón espec
             </tr>
         </thead>
         <tbody>
-            {% for vehicle in vehicles %}
+            {% for vehicle in object_list %}
             <tr>
                 <td>{{ vehicle.id }}</td>
                 <td>{{ vehicle.brand.name }}</td>

@@ -30,6 +30,14 @@ Para aquellos que están empezando Django desde 0, está guía es para tí
   * [Repaso](#repaso-1)
 - [Arreglando rutas](#arreglando-rutas)
   * [Añadiendo algo de seguridad](#anadiendo-algo-de-seguridad)
+- [Creando mi modelo](#creando-mi-modelo)
+  * [Aplicando los cambios a la base de datos](#aplicando-los-cambios-a-la-base-de-datos)
+  * [Creando formularios con django forms](#creando-formularios-con-django-forms)
+  * [Creando vistas en Django con Clases especiales](#creando-vistas-en-django-con-clases-especiales)
+- [Pendientes](#pendientes)
+- [Buenas Prácticas](#buenas-practicas)
+  * [Python General](#python-general)
+  * [Django](#django)
 
 <!-- tocstop -->
 
@@ -1485,4 +1493,3 @@ class Perro(models.Model):
 5. En los archivos html de Django no uses rutas como `/usuarios/editar/{{ user.id }}`. En su lugar usa `{% url 'user-edit' user.id %}`
 
 6. Trata de crear una carpeta con el mismo nombre de la app en tus templates, así vas a ubicar fácilmente tus archivos html.
-
